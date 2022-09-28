@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.validation;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.JobManagerOptions;
+import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -44,6 +45,7 @@ import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.runtime.clusterframework.TaskExecutorProcessUtils;
 import org.apache.flink.runtime.jobmanager.JobManagerProcessUtils;
+import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.util.StringUtils;
 
 import javax.annotation.Nullable;
@@ -60,7 +62,9 @@ public class DefaultValidator implements FlinkResourceValidator {
             Pattern.compile("[a-z]([-a-z\\d]{0,43}[a-z\\d])?");
     private static final String[] FORBIDDEN_CONF_KEYS =
             new String[] {
-                KubernetesConfigOptions.NAMESPACE.key(), KubernetesConfigOptions.CLUSTER_ID.key()
+                KubernetesConfigOptions.NAMESPACE.key(),
+                KubernetesConfigOptions.CLUSTER_ID.key(),
+                HighAvailabilityOptions.HA_CLUSTER_ID.key()
             };
 
     private static final Set<String> ALLOWED_LOG_CONF_KEYS =
@@ -170,6 +174,7 @@ public class DefaultValidator implements FlinkResourceValidator {
 
         if (conf.get(KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED)
                 && !FlinkUtils.isKubernetesHAActivated(conf)) {
+            // TODO can we do it with Zookeeper?
             return Optional.of("Kubernetes HA must be enabled for rollback support.");
         }
 
@@ -213,9 +218,8 @@ public class DefaultValidator implements FlinkResourceValidator {
 
         Configuration configuration = Configuration.fromMap(confMap);
         if (job.getUpgradeMode() == UpgradeMode.LAST_STATE
-                && !FlinkUtils.isKubernetesHAActivated(configuration)) {
-            return Optional.of(
-                    "Job could not be upgraded with last-state while Kubernetes HA disabled");
+                && !HighAvailabilityMode.isHighAvailabilityModeActivated(configuration)) {
+            return Optional.of("Job could not be upgraded with last-state while HA disabled");
         }
 
         if (job.getUpgradeMode() != UpgradeMode.STATELESS) {
@@ -295,9 +299,10 @@ public class DefaultValidator implements FlinkResourceValidator {
         if (replicas < 1) {
             return Optional.of("JobManager replicas should not be configured less than one.");
         } else if (replicas > 1
-                && !FlinkUtils.isKubernetesHAActivated(Configuration.fromMap(confMap))) {
+                && !HighAvailabilityMode.isHighAvailabilityModeActivated(
+                        Configuration.fromMap(confMap))) {
             return Optional.of(
-                    "Kubernetes High availability should be enabled when starting standby JobManagers.");
+                    "High availability should be enabled when starting standby JobManagers.");
         }
         return Optional.empty();
     }

@@ -188,7 +188,7 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     @Override
     public boolean isHaMetadataAvailable(Configuration conf) {
-        return FlinkUtils.isKubernetesHAActivated(conf) && haDataAvailable;
+        return FlinkUtils.isHAActivated(conf) && haDataAvailable;
     }
 
     public void setHaDataAvailable(boolean haDataAvailable) {

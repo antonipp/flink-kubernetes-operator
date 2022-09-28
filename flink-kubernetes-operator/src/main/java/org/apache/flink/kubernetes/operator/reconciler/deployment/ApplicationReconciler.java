@@ -45,6 +45,7 @@ import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import lombok.SneakyThrows;
+import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -85,8 +86,8 @@ public class ApplicationReconciler
         if (deployConfig.getBoolean(
                         KubernetesOperatorConfigOptions
                                 .OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED)
-                && FlinkUtils.isKubernetesHAActivated(deployConfig)
-                && FlinkUtils.isKubernetesHAActivated(ctx.getObserveConfig())
+                && HighAvailabilityMode.isHighAvailabilityModeActivated(deployConfig)
+                && HighAvailabilityMode.isHighAvailabilityModeActivated(ctx.getObserveConfig())
                 && !flinkVersionChanged(
                         ReconciliationUtils.getDeployedSpec(deployment), deployment.getSpec())) {
 

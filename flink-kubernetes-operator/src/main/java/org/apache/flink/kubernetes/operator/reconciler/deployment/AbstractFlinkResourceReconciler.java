@@ -47,6 +47,7 @@ import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -426,7 +427,7 @@ public abstract class AbstractFlinkResourceReconciler<
 
             if (jmMissingForRunningDeployment(deployment)) {
                 LOG.debug("Jobmanager deployment is missing, trying to recover");
-                if (FlinkUtils.isKubernetesHAActivated(conf)) {
+                if (HighAvailabilityMode.isHighAvailabilityModeActivated(conf)) {
                     LOG.debug("HA is enabled, recovering lost jobmanager deployment");
                     result = true;
                 } else {

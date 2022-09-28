@@ -25,6 +25,7 @@ import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
@@ -72,6 +73,7 @@ import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerHea
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
 import org.apache.flink.runtime.rest.util.RestConstants;
 import org.apache.flink.runtime.state.memory.NonPersistentMetadataCheckpointStorageLocation;
+import org.apache.flink.runtime.util.ZooKeeperUtils;
 import org.apache.flink.runtime.webmonitor.handlers.JarDeleteHeaders;
 import org.apache.flink.runtime.webmonitor.handlers.JarDeleteMessageParameters;
 import org.apache.flink.runtime.webmonitor.handlers.JarRunHeaders;
@@ -172,6 +174,31 @@ public abstract class AbstractFlinkService implements FlinkService {
             // Delete the job graph in the HA ConfigMaps so that the newly changed job config(e.g.
             // parallelism) could take effect
             FlinkUtils.deleteJobGraphInKubernetesHA(clusterId, namespace, kubernetesClient);
+        } else if (FlinkUtils.isZookeeperHAActivated(conf)) {
+            /*try (var availableOrEmbeddedServices =
+                    HighAvailabilityServicesUtils.createAvailableOrEmbeddedServices(
+                            conf, UnsupportedOperationExecutor.INSTANCE, exception -> {})) {
+                availableOrEmbeddedServices
+                        .getJobGraphStore()
+                        .globalCleanupAsync(
+                                availableOrEmbeddedServices.getJobGraphStore().getJobIds().stream()
+                                        .findFirst()
+                                        .get(),
+                                Executors.newFixedThreadPool(1));
+            }*/
+            try (var curator = ZooKeeperUtils.startCuratorFramework(conf, exception -> {})) {
+                // curator.asCuratorFramework().checkExists().forPath();
+                LOG.info(
+                        "Anton-test: namespace: {} // HA_ZOOKEEPER_JOBGRAPHS_PATH: {} // generateZookeeperPath: {}",
+                        curator.asCuratorFramework().getNamespace(),
+                        conf.get(HighAvailabilityOptions.HA_ZOOKEEPER_JOBGRAPHS_PATH),
+                        ZooKeeperUtils.generateZookeeperPath(
+                                conf.get(HighAvailabilityOptions.HA_ZOOKEEPER_JOBGRAPHS_PATH)));
+
+                ZooKeeperUtils.deleteZNode(
+                        curator.asCuratorFramework(),
+                        conf.get(HighAvailabilityOptions.HA_ZOOKEEPER_JOBGRAPHS_PATH));
+            }
         }
         if (requireHaMetadata) {
             validateHaMetadataExists(conf);
@@ -182,7 +209,13 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     @Override
     public boolean isHaMetadataAvailable(Configuration conf) {
-        return FlinkUtils.isHaMetadataAvailable(conf, kubernetesClient);
+        if (FlinkUtils.isKubernetesHAActivated(conf)) {
+            return FlinkUtils.isKubernetesHaMetadataAvailable(conf, kubernetesClient);
+        } else if (FlinkUtils.isZookeeperHAActivated(conf)) {
+            return FlinkUtils.isZookeeperHaMetadataAvailable(conf);
+        }
+
+        return false;
     }
 
     @Override

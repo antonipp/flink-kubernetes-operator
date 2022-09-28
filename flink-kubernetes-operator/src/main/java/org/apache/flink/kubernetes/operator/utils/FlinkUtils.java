@@ -28,6 +28,8 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
+import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
+import org.apache.flink.runtime.util.ZooKeeperUtils;
 import org.apache.flink.util.Preconditions;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -133,7 +135,26 @@ public class FlinkUtils {
         }
     }
 
-    public static boolean isHaMetadataAvailable(
+    public static boolean isZookeeperHaMetadataAvailable(Configuration conf) {
+        var clusterId = conf.get(HighAvailabilityOptions.HA_CLUSTER_ID);
+        try (var curator = ZooKeeperUtils.startCuratorFramework(conf, exception -> {})) {
+            LOG.info(
+                    "Anton test: clusterId: {} // generateZookeeperPath: {}",
+                    clusterId,
+                    ZooKeeperUtils.generateZookeeperPath(clusterId));
+            return curator.asCuratorFramework()
+                            .checkExists()
+                            .forPath(ZooKeeperUtils.generateZookeeperPath(clusterId))
+                    != null;
+        } catch (Exception e) {
+            // TODO
+            LOG.error("Could not check path");
+        }
+
+        return false;
+    }
+
+    public static boolean isKubernetesHaMetadataAvailable(
             Configuration conf, KubernetesClient kubernetesClient) {
 
         String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
@@ -169,6 +190,11 @@ public class FlinkUtils {
 
     private static boolean isJobGraphKey(Map.Entry<String, String> entry) {
         return entry.getKey().startsWith(Constants.JOB_GRAPH_STORE_KEY_PREFIX);
+    }
+
+    public static boolean isZookeeperHAActivated(Configuration configuration) {
+        return HighAvailabilityMode.fromConfig(configuration)
+                .equals(HighAvailabilityMode.ZOOKEEPER);
     }
 
     public static boolean isKubernetesHAActivated(Configuration configuration) {
