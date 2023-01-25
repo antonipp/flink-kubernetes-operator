@@ -342,7 +342,7 @@ public class FlinkConfigBuilder {
         effectiveConfig.setString(KubernetesConfigOptions.NAMESPACE, namespace);
         effectiveConfig.setString(KubernetesConfigOptions.CLUSTER_ID, clusterId);
 
-        if (HighAvailabilityMode.isHighAvailabilityModeActivated(effectiveConfig)) {
+        if (FlinkUtils.isZookeeperHAActivated(effectiveConfig)) {
             effectiveConfig.setString(HighAvailabilityOptions.HA_CLUSTER_ID, clusterId);
         }
 

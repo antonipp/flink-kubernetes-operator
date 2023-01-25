@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
+import org.apache.flink.runtime.highavailability.zookeeper.CuratorFrameworkWithUnhandledErrorListener;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.runtime.util.ZooKeeperUtils;
 import org.apache.flink.util.Preconditions;
@@ -135,20 +136,17 @@ public class FlinkUtils {
         }
     }
 
-    public static boolean isZookeeperHaMetadataAvailable(Configuration conf) {
-        var clusterId = conf.get(HighAvailabilityOptions.HA_CLUSTER_ID);
-        try (var curator = ZooKeeperUtils.startCuratorFramework(conf, exception -> {})) {
-            LOG.info(
-                    "Anton test: clusterId: {} // generateZookeeperPath: {}",
-                    clusterId,
-                    ZooKeeperUtils.generateZookeeperPath(clusterId));
+    public static boolean isZookeeperHaMetadataAvailable(Configuration conf, CuratorFrameworkWithUnhandledErrorListener curator) {
+        try (curator) {
             return curator.asCuratorFramework()
                             .checkExists()
-                            .forPath(ZooKeeperUtils.generateZookeeperPath(clusterId))
+                            .forPath("/")
                     != null;
         } catch (Exception e) {
-            // TODO
-            LOG.error("Could not check path");
+            LOG.error("Could not check whether the path {} exists in Zookeeper",
+                    ZooKeeperUtils.generateZookeeperPath(conf.get(HighAvailabilityOptions.HA_ZOOKEEPER_ROOT), conf.get(HighAvailabilityOptions.HA_CLUSTER_ID)),
+                    e
+            );
         }
 
         return false;

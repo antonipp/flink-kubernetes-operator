@@ -51,6 +51,7 @@ import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
+import org.apache.flink.runtime.highavailability.zookeeper.CuratorFrameworkWithUnhandledErrorListener;
 import org.apache.flink.runtime.jobgraph.RestoreMode;
 import org.apache.flink.runtime.jobmaster.JobResult;
 import org.apache.flink.runtime.messages.webmonitor.JobDetails;
@@ -162,44 +163,32 @@ public abstract class AbstractFlinkService implements FlinkService {
         return kubernetesClient;
     }
 
+    public CuratorFrameworkWithUnhandledErrorListener getCurator(Configuration conf) {
+        return ZooKeeperUtils.startCuratorFramework(conf, exception -> {});
+    }
+
     @Override
     public void submitApplicationCluster(
             JobSpec jobSpec, Configuration conf, boolean requireHaMetadata) throws Exception {
         LOG.info(
                 "Deploying application cluster{}",
                 requireHaMetadata ? " requiring last-state from HA metadata" : "");
+
+        // If Kubernetes or Zookeeper HA are activated, delete the job graph in HA storage so that the newly
+        // changed job config (e.g. parallelism) could take effect
         if (FlinkUtils.isKubernetesHAActivated(conf)) {
             final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
             final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
-            // Delete the job graph in the HA ConfigMaps so that the newly changed job config(e.g.
-            // parallelism) could take effect
             FlinkUtils.deleteJobGraphInKubernetesHA(clusterId, namespace, kubernetesClient);
         } else if (FlinkUtils.isZookeeperHAActivated(conf)) {
-            /*try (var availableOrEmbeddedServices =
-                    HighAvailabilityServicesUtils.createAvailableOrEmbeddedServices(
-                            conf, UnsupportedOperationExecutor.INSTANCE, exception -> {})) {
-                availableOrEmbeddedServices
-                        .getJobGraphStore()
-                        .globalCleanupAsync(
-                                availableOrEmbeddedServices.getJobGraphStore().getJobIds().stream()
-                                        .findFirst()
-                                        .get(),
-                                Executors.newFixedThreadPool(1));
-            }*/
-            try (var curator = ZooKeeperUtils.startCuratorFramework(conf, exception -> {})) {
-                // curator.asCuratorFramework().checkExists().forPath();
-                LOG.info(
-                        "Anton-test: namespace: {} // HA_ZOOKEEPER_JOBGRAPHS_PATH: {} // generateZookeeperPath: {}",
-                        curator.asCuratorFramework().getNamespace(),
-                        conf.get(HighAvailabilityOptions.HA_ZOOKEEPER_JOBGRAPHS_PATH),
-                        ZooKeeperUtils.generateZookeeperPath(
-                                conf.get(HighAvailabilityOptions.HA_ZOOKEEPER_JOBGRAPHS_PATH)));
-
+            try (var curator = getCurator(conf)) {
                 ZooKeeperUtils.deleteZNode(
-                        curator.asCuratorFramework(),
-                        conf.get(HighAvailabilityOptions.HA_ZOOKEEPER_JOBGRAPHS_PATH));
+                    curator.asCuratorFramework(),
+                    conf.get(HighAvailabilityOptions.HA_ZOOKEEPER_JOBGRAPHS_PATH)
+                );
             }
         }
+
         if (requireHaMetadata) {
             validateHaMetadataExists(conf);
         }
@@ -212,7 +201,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         if (FlinkUtils.isKubernetesHAActivated(conf)) {
             return FlinkUtils.isKubernetesHaMetadataAvailable(conf, kubernetesClient);
         } else if (FlinkUtils.isZookeeperHAActivated(conf)) {
-            return FlinkUtils.isZookeeperHaMetadataAvailable(conf);
+            return FlinkUtils.isZookeeperHaMetadataAvailable(conf, getCurator(conf));
         }
 
         return false;

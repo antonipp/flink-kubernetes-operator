@@ -293,7 +293,7 @@ public class ApplicationReconciler
                     if (deployment.getSpec().getJob().getUpgradeMode() == UpgradeMode.STATELESS) {
                         LOG.debug("Stateless job, recovering unhealthy jobmanager deployment");
                         restartNeeded = true;
-                    } else if (FlinkUtils.isKubernetesHAActivated(observeConfig)) {
+                    } else if (HighAvailabilityMode.isHighAvailabilityModeActivated(observeConfig)) {
                         LOG.debug("HA is enabled, recovering unhealthy jobmanager deployment");
                         restartNeeded = true;
                     } else {
